@@ -31,7 +31,7 @@
             "version": "1.0.0",
             "lang": "en",
             "nsfw": false,
-            "iconUrl": "https://animepahe.ru/favicon.ico",
+            "iconUrl": "https://animepahe.si/favicon.ico",
             "bundleUrl": "animepahe.js",
             "description": "Lightweight anime streaming with small file sizes"
         }
