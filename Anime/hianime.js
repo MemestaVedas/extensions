@@ -12,6 +12,21 @@
  * This version uses direct scraping similar to the built-in extension.
  * ====================================================================
  */
+
+// Capture the fetch parameter passed by the loader (Tauri HTTP)
+const tauriFetch = fetch;
+
+return {
+    id: 'hianime',
+    // ... rest of the code
+    
+    async search(filter) {
+        // Use tauriFetch instead of fetch
+        const response = await tauriFetch(url, { ... });
+    }
+    // Apply to ALL fetch calls in the file
+};
+
 return {
     id: 'hianime',
     name: 'HiAnime',
