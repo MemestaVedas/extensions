@@ -4,269 +4,177 @@
  * ====================================================================
  * 
  * AnimePahe anime source extension for PLAY-ON!
- * Provides search, anime info, episodes, and streaming sources.
- * 
- * Note: AnimePahe uses Cloudflare protection. If requests fail,
- * it may be due to Cloudflare blocking. Try again or use VPN.
+ * Uses animepahe.ru with Tauri HTTP plugin for CORS bypass.
  * ====================================================================
  */
+// Capture the Tauri fetch passed by the loader
+const tauriFetch = fetch;
+const HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Referer': 'https://animepahe.ru/'
+};
+// Extract stream URL from Kwik embed
+async function extractKwik(url) {
+    try {
+        console.log('[AnimePahe] Extracting from kwik:', url);
+        const response = await tauriFetch(url, {
+            headers: { ...HEADERS, 'Referer': 'https://animepahe.ru/' }
+        });
+        const html = await response.text();
+        // Find the eval/packed script
+        const packedMatch = html.match(/eval\(function\(p,a,c,k,e,d\)[\s\S]+?\)\)/);
+        if (!packedMatch) {
+            // Try to find direct m3u8 link
+            const m3u8Match = html.match(/https?:\/\/[^"'\s]+\.m3u8[^"'\s]*/);
+            if (m3u8Match) {
+                return { url: m3u8Match[0], isM3U8: true };
+            }
+            // Try to find mp4 link
+            const mp4Match = html.match(/https?:\/\/[^"'\s]+\.mp4[^"'\s]*/);
+            if (mp4Match) {
+                return { url: mp4Match[0], isM3U8: false };
+            }
+            throw new Error('Could not find stream URL in kwik page');
+        }
+        // Simple unpacker for p,a,c,k,e,d format
+        const packed = packedMatch[0];
+        const urlMatch = packed.match(/https?:\\\/\\\/[^"'\s]+/g);
+        if (urlMatch) {
+            for (const match of urlMatch) {
+                const cleanUrl = match.replace(/\\\//g, '/');
+                if (cleanUrl.includes('.m3u8') || cleanUrl.includes('.mp4')) {
+                    return { url: cleanUrl, isM3U8: cleanUrl.includes('.m3u8') };
+                }
+            }
+        }
+        throw new Error('Could not extract stream URL');
+    } catch (err) {
+        console.error('[AnimePahe] Kwik extraction failed:', err);
+        return null;
+    }
+}
 return {
     id: 'animepahe',
     name: 'AnimePahe',
-    baseUrl: 'https://animepahe.si',
+    baseUrl: 'https://animepahe.ru',
+    apiUrl: 'https://animepahe.ru/api',
     lang: 'en',
-    version: '1.0.0',
-    iconUrl: 'https://animepahe.si/favicon.ico',
-
-    /**
-     * Search for anime
-     */
+    version: '1.1.0',
+    iconUrl: 'https://animepahe.ru/favicon.ico',
     async search(filter) {
         const query = filter.query || '';
-        const page = filter.page || 1;
-
         console.log('[AnimePahe] Searching:', query);
-
         try {
-            const response = await fetch(
-                `${this.baseUrl}/api?m=search&q=${encodeURIComponent(query)}`,
-                {
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                        'Accept': 'application/json',
-                        'Referer': this.baseUrl
-                    }
-                }
+            const response = await tauriFetch(
+                `${this.apiUrl}?m=search&q=${encodeURIComponent(query)}`,
+                { headers: { ...HEADERS, 'Accept': 'application/json' } }
             );
-
-            if (!response.ok) {
-                throw new Error(`Search failed: ${response.status}`);
-            }
-
+            if (!response.ok) throw new Error(`Search failed: ${response.status}`);
             const data = await response.json();
-
-            if (!data || !data.data) {
-                return { anime: [], hasNextPage: false };
-            }
-
+            if (!data || !data.data) return { anime: [], hasNextPage: false };
             const anime = data.data.map(item => ({
                 id: item.session,
                 title: item.title,
                 coverUrl: item.poster || '',
-                releaseDate: item.year ? String(item.year) : undefined,
                 type: item.type || 'TV',
-                status: item.status === 'Airing' ? 'ongoing' : 'completed',
-                totalEpisodes: item.episodes || undefined
+                episodes: item.episodes || 0,
+                status: item.status?.toLowerCase() || 'unknown',
+                year: item.year || undefined
             }));
-
-            return {
-                anime,
-                hasNextPage: false
-            };
+            console.log(`[AnimePahe] Found ${anime.length} results`);
+            return { anime, hasNextPage: false };
         } catch (error) {
             console.error('[AnimePahe] Search error:', error);
-            throw error;
+            return { anime: [], hasNextPage: false };
         }
     },
-
-    /**
-     * Get anime details
-     */
     async getAnimeInfo(animeId) {
         console.log('[AnimePahe] Getting info for:', animeId);
-
         try {
-            const response = await fetch(
+            const response = await tauriFetch(
                 `${this.baseUrl}/anime/${animeId}`,
-                {
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                        'Accept': 'text/html',
-                        'Referer': this.baseUrl
-                    }
-                }
+                { headers: HEADERS }
             );
-
-            if (!response.ok) {
-                throw new Error(`Failed to get anime info: ${response.status}`);
-            }
-
+            if (!response.ok) throw new Error(`Failed to get anime info: ${response.status}`);
             const html = await response.text();
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(html, 'text/html');
-
-            // Parse title
-            const titleEl = doc.querySelector('.anime-title');
-            const title = titleEl ? titleEl.textContent.trim() : 'Unknown';
-
-            // Parse cover
-            const coverEl = doc.querySelector('.anime-poster img');
-            const coverUrl = coverEl ? coverEl.getAttribute('src') : '';
-
-            // Parse synopsis
-            const synopsisEl = doc.querySelector('.anime-synopsis');
-            const description = synopsisEl ? synopsisEl.textContent.trim() : '';
-
-            // Parse genres
-            const genreEls = doc.querySelectorAll('.anime-genre a');
-            const genres = Array.from(genreEls).map(el => el.textContent.trim());
-
-            // Parse status
-            const statusEl = doc.querySelector('.anime-status');
-            const statusText = statusEl ? statusEl.textContent.toLowerCase() : '';
-            const status = statusText.includes('airing') ? 'ongoing' : 'completed';
-
-            return {
-                id: animeId,
-                title,
-                coverUrl,
-                description,
-                genres,
-                status,
-                url: `${this.baseUrl}/anime/${animeId}`
-            };
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+            const title = doc.querySelector('.title-wrapper h1 span')?.textContent?.trim() || 'Unknown';
+            const coverUrl = doc.querySelector('.anime-poster img')?.getAttribute('src') || '';
+            const description = doc.querySelector('.anime-synopsis')?.textContent?.trim() || '';
+            const genres = Array.from(doc.querySelectorAll('.anime-genre a')).map(el => el.textContent.trim());
+            return { id: animeId, title, coverUrl, description, genres, status: 'unknown' };
         } catch (error) {
             console.error('[AnimePahe] GetAnimeInfo error:', error);
             throw error;
         }
     },
-
-    /**
-     * Get episode list
-     */
     async getEpisodes(animeId) {
         console.log('[AnimePahe] Getting episodes for:', animeId);
-
         try {
-            // AnimePahe uses paginated API for episodes
-            const response = await fetch(
-                `${this.baseUrl}/api?m=release&id=${animeId}&sort=episode_asc&page=1`,
-                {
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                        'Accept': 'application/json',
-                        'Referer': this.baseUrl
-                    }
-                }
-            );
-
-            if (!response.ok) {
-                throw new Error(`Failed to get episodes: ${response.status}`);
-            }
-
-            const data = await response.json();
-
-            if (!data || !data.data) {
-                return [];
-            }
-
-            // Fetch all pages if there are more
-            let allEpisodes = [...data.data];
-            let currentPage = 1;
-            const totalPages = data.last_page || 1;
-
-            while (currentPage < totalPages) {
-                currentPage++;
-                const pageResponse = await fetch(
-                    `${this.baseUrl}/api?m=release&id=${animeId}&sort=episode_asc&page=${currentPage}`,
-                    {
-                        headers: {
-                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                            'Accept': 'application/json',
-                            'Referer': this.baseUrl
-                        }
-                    }
+            const allEpisodes = [];
+            let page = 1;
+            let hasMore = true;
+            while (hasMore) {
+                const response = await tauriFetch(
+                    `${this.apiUrl}?m=release&id=${animeId}&sort=episode_asc&page=${page}`,
+                    { headers: { ...HEADERS, 'Accept': 'application/json' } }
                 );
-
-                if (pageResponse.ok) {
-                    const pageData = await pageResponse.json();
-                    if (pageData && pageData.data) {
-                        allEpisodes = [...allEpisodes, ...pageData.data];
-                    }
-                }
+                if (!response.ok) break;
+                const data = await response.json();
+                if (!data || !data.data || data.data.length === 0) break;
+                data.data.forEach(ep => {
+                    allEpisodes.push({
+                        id: ep.session,
+                        number: ep.episode || allEpisodes.length + 1,
+                        title: `Episode ${ep.episode}`,
+                        snapshot: ep.snapshot || undefined,
+                        duration: ep.duration || undefined
+                    });
+                });
+                hasMore = page < (data.last_page || 1);
+                page++;
+                // Safety limit
+                if (page > 50) break;
             }
-
-            return allEpisodes.map(ep => ({
-                id: `${animeId}/${ep.session}`,
-                number: ep.episode || 0,
-                title: ep.title || `Episode ${ep.episode}`,
-                image: ep.snapshot || undefined,
-                isFiller: ep.filler === 1
-            }));
+            console.log(`[AnimePahe] Found ${allEpisodes.length} episodes`);
+            return allEpisodes;
         } catch (error) {
             console.error('[AnimePahe] GetEpisodes error:', error);
-            throw error;
+            return [];
         }
     },
-
-    /**
-     * Get streaming sources for an episode
-     */
-    async getEpisodeSources(episodeId, server) {
+    async getEpisodeSources(episodeId, _server) {
         console.log('[AnimePahe] Getting sources for:', episodeId);
-
         try {
-            const [animeId, session] = episodeId.split('/');
-
-            // Get the play page
-            const response = await fetch(
-                `${this.baseUrl}/play/${animeId}/${session}`,
-                {
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                        'Accept': 'text/html',
-                        'Referer': this.baseUrl
-                    }
-                }
+            const response = await tauriFetch(
+                `${this.apiUrl}?m=links&id=${episodeId}&p=kwik`,
+                { headers: { ...HEADERS, 'Accept': 'application/json' } }
             );
-
-            if (!response.ok) {
-                throw new Error(`Failed to get sources: ${response.status}`);
+            if (!response.ok) throw new Error(`Failed to get sources: ${response.status}`);
+            const data = await response.json();
+            if (!data || !data.data || data.data.length === 0) {
+                throw new Error('No sources found');
             }
-
-            const html = await response.text();
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(html, 'text/html');
-
-            // Find the download/streaming links
-            const sources = [];
-            const linkEls = doc.querySelectorAll('#pickDownload a, .dropdown-menu a[href*="kwik"]');
-
-            for (const el of linkEls) {
-                const href = el.getAttribute('href');
-                const quality = el.textContent.trim().match(/(\d+p)/)?.[1] || 'default';
-
-                if (href) {
-                    // Note: AnimePahe uses kwik.cx for streaming which requires additional extraction
-                    // For now, return the kwik URL - player may need to handle extraction
-                    sources.push({
-                        url: href,
-                        quality: quality,
-                        isM3U8: false
-                    });
+            // Try each quality until one works
+            const qualities = data.data.sort((a, b) => (b.resolution || 0) - (a.resolution || 0));
+            for (const quality of qualities) {
+                const kwikUrl = quality.kwik;
+                if (!kwikUrl) continue;
+                const extracted = await extractKwik(kwikUrl);
+                if (extracted) {
+                    return {
+                        sources: [{
+                            url: extracted.url,
+                            quality: `${quality.resolution || 'auto'}p`,
+                            isM3U8: extracted.isM3U8
+                        }],
+                        headers: { 'Referer': 'https://kwik.si/', 'Origin': 'https://kwik.si' }
+                    };
                 }
             }
-
-            // If no sources found, try to find embedded player
-            if (sources.length === 0) {
-                const iframeEl = doc.querySelector('iframe[src*="kwik"]');
-                if (iframeEl) {
-                    const iframeSrc = iframeEl.getAttribute('src');
-                    sources.push({
-                        url: iframeSrc,
-                        quality: 'default',
-                        isM3U8: false
-                    });
-                }
-            }
-
-            return {
-                sources,
-                headers: {
-                    'Referer': this.baseUrl,
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                }
-            };
+            throw new Error('All sources failed');
         } catch (error) {
             console.error('[AnimePahe] GetEpisodeSources error:', error);
             throw error;
