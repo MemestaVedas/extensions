@@ -4,7 +4,7 @@
  * ====================================================================
  * 
  * AnimePahe anime source extension for PLAY-ON!
- * Uses animepahe.ru with Tauri HTTP plugin for CORS bypass.
+ * Uses animepahe.si with Tauri HTTP plugin for CORS bypass.
  * ====================================================================
  */
 // Capture the Tauri fetch passed by the loader
@@ -20,7 +20,7 @@ async function extractKwik(url) {
     try {
         console.log('[AnimePahe] Extracting from kwik:', url);
         const response = await tauriFetch(url, {
-            headers: { ...HEADERS, 'Referer': 'https://animepahe.ru/' }
+            headers: { ...HEADERS, 'Referer': 'https://animepahe.si/' }
         });
         const html = await response.text();
         // Find the eval/packed script
