@@ -13,7 +13,7 @@ const HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     'Accept-Language': 'en-US,en;q=0.9',
-    'Referer': 'https://animepahe.ru/'
+    'Referer': 'https://animepahe.si/'
 };
 // Extract stream URL from Kwik embed
 async function extractKwik(url) {
@@ -58,11 +58,11 @@ async function extractKwik(url) {
 return {
     id: 'animepahe',
     name: 'AnimePahe',
-    baseUrl: 'https://animepahe.ru',
-    apiUrl: 'https://animepahe.ru/api',
+    baseUrl: 'https://animepahe.si',
+    apiUrl: 'https://animepahe.si/api',
     lang: 'en',
     version: '1.1.0',
-    iconUrl: 'https://animepahe.ru/favicon.ico',
+    iconUrl: 'https://animepahe.si/favicon.ico',
     async search(filter) {
         const query = filter.query || '';
         console.log('[AnimePahe] Searching:', query);
