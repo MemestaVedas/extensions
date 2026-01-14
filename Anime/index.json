@@ -12,6 +12,17 @@
             "iconUrl": "https://hianime.to/favicon.ico",
             "bundleUrl": "hianime.js",
             "description": "Stream anime with sub and dub options"
+        },
+        {
+            "id": "hianimecz",
+            "name": "HiAnime.cz",
+            "type": "anime",
+            "version": "1.0.0",
+            "lang": "en",
+            "nsfw": false,
+            "iconUrl": "https://hianime.cz/favicon.ico",
+            "bundleUrl": "hianime.js",
+            "description": "Stream anime with sub and dub options"
         }
     ]
 }
