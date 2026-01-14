@@ -3,7 +3,7 @@
     "description": "Official anime streaming source extensions for PLAY-ON!",
     "extensions": [
         {
-            "id": "hianime",
+            "id": "hianimeto",
             "name": "HiAnime",
             "type": "anime",
             "version": "1.0.0",
