@@ -1,6 +1,6 @@
 {
     "name": "PLAY-ON! Anime Extensions",
-    "description": "Official anime streaming source extensions for PLAY-ON!",
+    "description": "Official anime streaming source extensions for PLAY-ON!, for now only supports HiAnime sites.",
     "extensions": [
         {
             "id": "hianimeto",
