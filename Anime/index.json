@@ -10,7 +10,7 @@
             "lang": "en",
             "nsfw": false,
             "iconUrl": "https://hianime.to/favicon.ico",
-            "bundleUrl": "hianime.js",
+            "bundleUrl": "hianimeto.js",
             "description": "Stream anime with sub and dub options"
         },
         {
@@ -21,7 +21,7 @@
             "lang": "en",
             "nsfw": false,
             "iconUrl": "https://hianime.cz/favicon.ico",
-            "bundleUrl": "hianime.js",
+            "bundleUrl": "hianimecz.js",
             "description": "Stream anime with sub and dub options"
         }
     ]
