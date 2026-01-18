@@ -188,148 +188,115 @@ return {
     },
     async getEpisodeSources(episodeId, _server) {
         // Episode ID is the slug, e.g., one-piece-episode-1
-        const url = `${this.baseUrl}/${episodeId}/`;
-        console.log(`[9Anime] Sources: ${url}`);
-        const response = await tauriFetch(url, { headers: HEADERS });
-        const html = await response.text();
-        const doc = new DOMParser().parseFromString(html, 'text/html');
+        // Extract episode number from the slug
+        const episodeMatch = episodeId.match(/episode[- ]?(\d+)/i);
+        const episodeNum = episodeMatch ? parseInt(episodeMatch[1]) : 1;
 
-        // 1. Check for direct VIDEO tag first
-        const video = doc.querySelector('video source');
-        if (video) {
-            const src = video.getAttribute('src');
-            if (src) {
-                console.log(`[9Anime] Found direct video source: ${src}`);
+        // Extract anime title from episode ID (remove episode part)
+        const animeSlug = episodeId.replace(/-?episode[- ]?\d+$/i, '').trim();
+
+        console.log(`[9Anime] Sources for: ${animeSlug} Episode ${episodeNum}`);
+
+        // Try to get the page to find any AniList/MAL ID references
+        const url = `${this.baseUrl}/${episodeId}/`;
+        console.log(`[9Anime] Fetching page: ${url}`);
+
+        try {
+            const response = await tauriFetch(url, { headers: HEADERS });
+            const html = await response.text();
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+
+            // Check for direct VIDEO tag first
+            const video = doc.querySelector('video source');
+            if (video) {
+                const src = video.getAttribute('src');
+                if (src) {
+                    console.log(`[9Anime] Found direct video source: ${src}`);
+                    return {
+                        sources: [{
+                            url: src,
+                            quality: 'auto',
+                            isM3U8: src.includes('.m3u8'),
+                            isEmbed: false
+                        }],
+                        headers: HEADERS
+                    };
+                }
+            }
+
+            // Look for MAL ID in the page (common in anime sites)
+            const malMatch = html.match(/myanimelist\.net\/anime\/(\d+)/i) ||
+                html.match(/mal[_-]?id["\s:=]+(\d+)/i);
+
+            // Look for AniList ID
+            const anilistMatch = html.match(/anilist\.co\/anime\/(\d+)/i) ||
+                html.match(/anilist[_-]?id["\s:=]+(\d+)/i);
+
+            // Use vidsrc.pro with whatever ID we found
+            if (malMatch) {
+                const malId = malMatch[1];
+                const vidsrcUrl = `https://vidsrc.pro/embed/anime/mal/${malId}/${episodeNum}`;
+                console.log(`[9Anime] Using vidsrc.pro with MAL ID: ${vidsrcUrl}`);
                 return {
                     sources: [{
-                        url: src,
+                        url: vidsrcUrl,
                         quality: 'auto',
-                        isM3U8: src.includes('.m3u8'),
-                        isEmbed: false
+                        isM3U8: false,
+                        isEmbed: true
                     }],
                     headers: HEADERS
                 };
             }
-        }
 
-        // 2. Extract from IFRAME embeds
-        const iframes = doc.querySelectorAll('iframe');
-        for (const iframe of iframes) {
-            const embedSrc = iframe.getAttribute('src');
-            if (!embedSrc) continue;
+            if (anilistMatch) {
+                const anilistId = anilistMatch[1];
+                const vidsrcUrl = `https://vidsrc.pro/embed/anime/al/${anilistId}/${episodeNum}`;
+                console.log(`[9Anime] Using vidsrc.pro with AniList ID: ${vidsrcUrl}`);
+                return {
+                    sources: [{
+                        url: vidsrcUrl,
+                        quality: 'auto',
+                        isM3U8: false,
+                        isEmbed: true
+                    }],
+                    headers: HEADERS
+                };
+            }
 
-            console.log(`[9Anime] Trying to extract from embed: ${embedSrc}`);
-
-            try {
-                // Fetch the embed page using tauriFetch to bypass CORS
-                const embedResponse = await tauriFetch(embedSrc, {
-                    headers: {
-                        ...HEADERS,
-                        'Referer': url
-                    }
-                });
-                const embedHtml = await embedResponse.text();
-
-                // Look for video sources in the embed HTML
-                // Common patterns: file:"url", sources:[{file:"url"}], src="url.m3u8"
-
-                // Pattern 1: file: "url" or file:"url"
-                const fileMatch = embedHtml.match(/file\s*[:"]\s*["']([^"']+\.(?:m3u8|mp4)[^"']*)/i);
-                if (fileMatch) {
-                    console.log(`[9Anime] Extracted video from embed: ${fileMatch[1]}`);
+            // Fallback: Return any iframe on the page
+            const iframes = doc.querySelectorAll('iframe');
+            for (const iframe of iframes) {
+                const src = iframe.getAttribute('src') || iframe.getAttribute('data-src');
+                if (src && src.startsWith('http')) {
+                    console.log(`[9Anime] Using existing iframe as fallback: ${src}`);
                     return {
                         sources: [{
-                            url: fileMatch[1],
+                            url: src,
                             quality: 'auto',
-                            isM3U8: fileMatch[1].includes('.m3u8'),
-                            isEmbed: false
+                            isM3U8: false,
+                            isEmbed: true
                         }],
-                        headers: {
-                            'Referer': embedSrc,
-                            'Origin': new URL(embedSrc).origin,
-                            ...HEADERS
-                        }
+                        headers: HEADERS
                     };
                 }
-
-                // Pattern 2: sources array
-                const sourcesMatch = embedHtml.match(/sources\s*[=:]\s*\[([^\]]+)\]/i);
-                if (sourcesMatch) {
-                    const urlMatch = sourcesMatch[1].match(/["']([^"']+\.(?:m3u8|mp4)[^"']*)/i);
-                    if (urlMatch) {
-                        console.log(`[9Anime] Extracted from sources array: ${urlMatch[1]}`);
-                        return {
-                            sources: [{
-                                url: urlMatch[1],
-                                quality: 'auto',
-                                isM3U8: urlMatch[1].includes('.m3u8'),
-                                isEmbed: false
-                            }],
-                            headers: {
-                                'Referer': embedSrc,
-                                'Origin': new URL(embedSrc).origin,
-                                ...HEADERS
-                            }
-                        };
-                    }
-                }
-
-                // Pattern 3: Generic m3u8/mp4 URL in the page
-                const genericMatch = embedHtml.match(/["'](https?:\/\/[^"']+\.(?:m3u8|mp4)[^"']*)/i);
-                if (genericMatch) {
-                    console.log(`[9Anime] Found generic video URL: ${genericMatch[1]}`);
-                    return {
-                        sources: [{
-                            url: genericMatch[1],
-                            quality: 'auto',
-                            isM3U8: genericMatch[1].includes('.m3u8'),
-                            isEmbed: false
-                        }],
-                        headers: {
-                            'Referer': embedSrc,
-                            'Origin': new URL(embedSrc).origin,
-                            ...HEADERS
-                        }
-                    };
-                }
-
-                // If extraction failed, save the embed URL as a fallback
-                console.log(`[9Anime] Could not extract video from embed: ${embedSrc} - will use as iframe fallback`);
-            } catch (err) {
-                console.warn(`[9Anime] Failed to fetch embed:`, err);
             }
+        } catch (err) {
+            console.warn(`[9Anime] Error fetching episode page:`, err);
         }
 
-        // If we couldn't extract direct video URLs, return embeds for iframe playback
-        // Re-query all iframes from the original page
-        const allIframes = doc.querySelectorAll('iframe');
-        console.log(`[9Anime] Total iframes on page: ${allIframes.length}`);
+        // Ultimate fallback: Use vidsrc.cc with title search
+        // vidsrc.cc allows searching by title
+        const vidsrcFallback = `https://vidsrc.cc/embed/anime?title=${encodeURIComponent(animeSlug.replace(/-/g, ' '))}&episode=${episodeNum}`;
+        console.log(`[9Anime] Using vidsrc.cc title search fallback: ${vidsrcFallback}`);
 
-        const embedFallbacks = [];
-        for (const iframe of allIframes) {
-            const src = iframe.getAttribute('src') || iframe.getAttribute('data-src');
-            console.log(`[9Anime] Found iframe src: ${src}`);
-
-            // Accept any iframe with a valid src URL
-            if (src && src.startsWith('http')) {
-                embedFallbacks.push({
-                    url: src,
-                    quality: 'auto',
-                    isM3U8: false,
-                    isEmbed: true // This tells the player to use iframe
-                });
-            }
-        }
-
-        if (embedFallbacks.length > 0) {
-            console.log(`[9Anime] Returning ${embedFallbacks.length} embed(s) for iframe playback`);
-            return {
-                sources: embedFallbacks,
-                headers: HEADERS
-            };
-        }
-
-        console.error('[9Anime] No iframes or video sources found at all');
-        throw new Error('No playable video sources found');
+        return {
+            sources: [{
+                url: vidsrcFallback,
+                quality: 'auto',
+                isM3U8: false,
+                isEmbed: true
+            }],
+            headers: HEADERS
+        };
     }
 };
