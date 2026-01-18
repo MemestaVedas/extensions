@@ -301,11 +301,17 @@ return {
         }
 
         // If we couldn't extract direct video URLs, return embeds for iframe playback
+        // Re-query all iframes from the original page
         const allIframes = doc.querySelectorAll('iframe');
+        console.log(`[9Anime] Total iframes on page: ${allIframes.length}`);
+
         const embedFallbacks = [];
         for (const iframe of allIframes) {
-            const src = iframe.getAttribute('src');
-            if (src && (src.includes('embed') || src.includes('player'))) {
+            const src = iframe.getAttribute('src') || iframe.getAttribute('data-src');
+            console.log(`[9Anime] Found iframe src: ${src}`);
+
+            // Accept any iframe with a valid src URL
+            if (src && src.startsWith('http')) {
                 embedFallbacks.push({
                     url: src,
                     quality: 'auto',
@@ -323,6 +329,7 @@ return {
             };
         }
 
+        console.error('[9Anime] No iframes or video sources found at all');
         throw new Error('No playable video sources found');
     }
 };
