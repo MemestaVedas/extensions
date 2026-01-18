@@ -232,11 +232,13 @@ return {
             const anilistMatch = html.match(/anilist\.co\/anime\/(\d+)/i) ||
                 html.match(/anilist[_-]?id["\s:=]+(\d+)/i);
 
-            // Use vidsrc.pro with whatever ID we found
+            // Use vidsrc.su with whatever ID we found
+            // Format: https://vidsrc.su/v2/embed/anime/{id}/{episode}/sub
             if (malMatch) {
                 const malId = malMatch[1];
-                const vidsrcUrl = `https://vidsrc.pro/embed/anime/mal/${malId}/${episodeNum}`;
-                console.log(`[9Anime] Using vidsrc.pro with MAL ID: ${vidsrcUrl}`);
+                // MAL ID doesn't need prefix
+                const vidsrcUrl = `https://vidsrc.su/v2/embed/anime/${malId}/${episodeNum}/sub`;
+                console.log(`[9Anime] Using vidsrc.su with MAL ID: ${vidsrcUrl}`);
                 return {
                     sources: [{
                         url: vidsrcUrl,
@@ -250,8 +252,9 @@ return {
 
             if (anilistMatch) {
                 const anilistId = anilistMatch[1];
-                const vidsrcUrl = `https://vidsrc.pro/embed/anime/al/${anilistId}/${episodeNum}`;
-                console.log(`[9Anime] Using vidsrc.pro with AniList ID: ${vidsrcUrl}`);
+                // AniList ID needs 'ani' prefix
+                const vidsrcUrl = `https://vidsrc.su/v2/embed/anime/ani${anilistId}/${episodeNum}/sub`;
+                console.log(`[9Anime] Using vidsrc.su with AniList ID: ${vidsrcUrl}`);
                 return {
                     sources: [{
                         url: vidsrcUrl,
@@ -284,19 +287,8 @@ return {
             console.warn(`[9Anime] Error fetching episode page:`, err);
         }
 
-        // Ultimate fallback: Use vidsrc.cc with title search
-        // vidsrc.cc allows searching by title
-        const vidsrcFallback = `https://vidsrc.cc/embed/anime?title=${encodeURIComponent(animeSlug.replace(/-/g, ' '))}&episode=${episodeNum}`;
-        console.log(`[9Anime] Using vidsrc.cc title search fallback: ${vidsrcFallback}`);
-
-        return {
-            sources: [{
-                url: vidsrcFallback,
-                quality: 'auto',
-                isM3U8: false,
-                isEmbed: true
-            }],
-            headers: HEADERS
-        };
+        // No ID found and no iframe - cannot play this anime
+        console.error(`[9Anime] No MAL/AniList ID found and no usable iframe for: ${animeSlug}`);
+        throw new Error(`Cannot find video source. This anime may not be available on 9anime.org.lv. Try using HiAnime instead.`);
     }
 };
