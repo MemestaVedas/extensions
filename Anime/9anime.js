@@ -293,10 +293,34 @@ return {
                     };
                 }
 
-                console.log(`[9Anime] Could not extract video from embed: ${embedSrc}`);
+                // If extraction failed, save the embed URL as a fallback
+                console.log(`[9Anime] Could not extract video from embed: ${embedSrc} - will use as iframe fallback`);
             } catch (err) {
                 console.warn(`[9Anime] Failed to fetch embed:`, err);
             }
+        }
+
+        // If we couldn't extract direct video URLs, return embeds for iframe playback
+        const allIframes = doc.querySelectorAll('iframe');
+        const embedFallbacks = [];
+        for (const iframe of allIframes) {
+            const src = iframe.getAttribute('src');
+            if (src && (src.includes('embed') || src.includes('player'))) {
+                embedFallbacks.push({
+                    url: src,
+                    quality: 'auto',
+                    isM3U8: false,
+                    isEmbed: true // This tells the player to use iframe
+                });
+            }
+        }
+
+        if (embedFallbacks.length > 0) {
+            console.log(`[9Anime] Returning ${embedFallbacks.length} embed(s) for iframe playback`);
+            return {
+                sources: embedFallbacks,
+                headers: HEADERS
+            };
         }
 
         throw new Error('No playable video sources found');
