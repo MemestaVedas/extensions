@@ -83,21 +83,54 @@ return {
         return { anime, hasNextPage: !!nextLink };
     },
     async getAnimeInfo(animeId) {
-        // ID is the slug, e.g., "naruto-shippuuden-dub"
-        // URL: /anime/naruto-shippuuden-dub/
+        // ID is the slug, e.g., "one-piece"
+        // URL: /anime/one-piece/
         const url = `${this.baseUrl}/anime/${animeId}/`;
         console.log(`[9Anime] Info: ${url}`);
         const response = await tauriFetch(url, { headers: HEADERS });
         const html = await response.text();
         const doc = new DOMParser().parseFromString(html, 'text/html');
+
+        // Title extraction - try multiple selectors
         const title = doc.querySelector('h1.entry-title')?.textContent?.trim() ||
+            doc.querySelector('.entry-header h1')?.textContent?.trim() ||
             doc.querySelector('h1')?.textContent?.trim() || 'Unknown';
-        // Synopsis often in .entry-content p or .synopsis
+
+        // Synopsis - look for common synopsis containers
         let description = '';
-        const descEl = doc.querySelector('.entry-content p') || doc.querySelector('.synopsis');
-        if (descEl) description = descEl.textContent?.trim();
-        const rawCoverUrl = doc.querySelector('.entry-content img')?.getAttribute('src') ||
-            doc.querySelector('.poster img')?.getAttribute('src') || '';
+        const descContainers = doc.querySelectorAll('.entry-content p, .synopsis, .description, [class*="synopsis"] p');
+        for (const el of descContainers) {
+            const text = el.textContent?.trim();
+            // Get the first substantial paragraph (more than 50 chars)
+            if (text && text.length > 50) {
+                description = text;
+                break;
+            }
+        }
+
+        // Cover image - try multiple possible selectors
+        let rawCoverUrl = '';
+        const imgSelectors = [
+            '.poster img',
+            '.film-poster img',
+            '.thumb img',
+            '.cover img',
+            'article img',
+            '.entry-content img',
+            'img[data-src]',
+            'img[src*="upload"]',
+            'img[src*="poster"]'
+        ];
+        for (const selector of imgSelectors) {
+            const img = doc.querySelector(selector);
+            if (img) {
+                rawCoverUrl = img.getAttribute('data-src') || img.getAttribute('src') || '';
+                if (rawCoverUrl && !rawCoverUrl.includes('avatar') && !rawCoverUrl.includes('icon')) {
+                    break;
+                }
+            }
+        }
+
         return {
             id: animeId,
             title,
@@ -107,46 +140,40 @@ return {
         };
     },
     async getEpisodes(animeId) {
-        // Episodes are typically listed on the anime page for these sites
+        // Episodes are listed on the anime page
         const url = `${this.baseUrl}/anime/${animeId}/`;
+        console.log(`[9Anime] Episodes: ${url}`);
         const response = await tauriFetch(url, { headers: HEADERS });
         const html = await response.text();
         const doc = new DOMParser().parseFromString(html, 'text/html');
         const episodes = [];
-        // Look for episode links. Usually in a list <ul> or <div>
-        // Link format: https://9anime.org.lv/episode-slug/
-        // We need to filter for links that look like episodes matching this anime
-        const links = doc.querySelectorAll('.entry-content a, .episodes-list a');
+
+        // 9anime.org.lv has episode links at root level: /anime-name-episode-X/
+        // Get all links on the page and filter for episode links
+        const links = doc.querySelectorAll('a[href]');
         links.forEach(link => {
-            const href = link.getAttribute('href');
-            const text = link.textContent?.trim();
-            // Check if it's an episode link (usually contains the anime slug + 'episode')
-            if (href && href.includes(animeId) && (href.includes('episode') || text.match(/^\d+$/))) {
-                // Extract number
-                let number = 0;
-                // Try to get number from text (often just "1", "2")
-                const textNum = parseInt(text);
-                if (!isNaN(textNum)) {
-                    number = textNum;
-                } else {
-                    // Try extract from URL
-                    const match = href.match(/episode-(\d+)/);
-                    if (match) number = parseInt(match[1]);
-                }
-                // ID is the full slug from the URL, simpler to use for fetching source later
-                // e.g., https://9anime.org.lv/naruto-episode-1/ -> ID: naruto-episode-1
-                const idMatch = href.match(/\/([^\/]+)\/?$/);
-                if (idMatch) {
+            const href = link.getAttribute('href') || '';
+            const text = link.textContent?.trim() || '';
+
+            // Episode links contain "episode" and a number in the URL
+            // Pattern: /{anime-slug}-episode-{number}/ or /episode-{number}/
+            const episodeMatch = href.match(/episode[- ]?(\d+)/i);
+            if (episodeMatch) {
+                const number = parseInt(episodeMatch[1]);
+                // Extract the episode slug from the URL
+                const slugMatch = href.match(/\/([^\/]+)\/?$/);
+                if (slugMatch) {
                     episodes.push({
-                        id: idMatch[1],
+                        id: slugMatch[1],
                         number: number,
-                        title: `Episode ${number}`,
+                        title: text || `Episode ${number}`,
                         url: href
                     });
                 }
             }
         });
-        // Deduplicate and sort
+
+        // Deduplicate by episode number and sort
         const uniqueEpisodes = [];
         const seen = new Set();
         episodes.sort((a, b) => a.number - b.number).forEach(ep => {
@@ -155,6 +182,8 @@ return {
                 uniqueEpisodes.push(ep);
             }
         });
+
+        console.log(`[9Anime] Found ${uniqueEpisodes.length} episodes`);
         return uniqueEpisodes;
     },
     async getEpisodeSources(episodeId, _server) {
