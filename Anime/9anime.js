@@ -13,6 +13,28 @@ const HEADERS = {
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     'Referer': 'https://9anime.org.lv/'
 };
+
+/**
+ * Cleans image URLs by removing the wp.com CDN prefix and query parameters.
+ * This bypasses "Tracking Prevention blocked access to storage" errors
+ * caused by the browser blocking the wp.com CDN domain.
+ * 
+ * Example:
+ *   Input:  https://i1.wp.com/9anime.org.lv/wp-content/uploads/2025/05/image.jpg?resize=247,350
+ *   Output: https://9anime.org.lv/wp-content/uploads/2025/05/image.jpg
+ */
+function cleanUrl(url) {
+    if (!url) return '';
+    // Remove wp.com CDN prefix (e.g., https://i1.wp.com/ -> https://)
+    let cleaned = url.replace(/^https?:\/\/i\d\.wp\.com\//, 'https://');
+    // Remove query parameters (e.g., ?resize=247,350)
+    const queryIndex = cleaned.indexOf('?');
+    if (queryIndex !== -1) {
+        cleaned = cleaned.substring(0, queryIndex);
+    }
+    return cleaned;
+}
+
 return {
     id: '9anime-org-lv',
     name: '9Anime (org.lv)',
@@ -48,7 +70,7 @@ return {
                         anime.push({
                             id: idMatch[1],
                             title: titleEl.textContent?.trim() || 'Unknown',
-                            coverUrl: imgEl?.getAttribute('src') || '',
+                            coverUrl: cleanUrl(imgEl?.getAttribute('src') || ''),
                             status: 'Unknown',
                             type: 'TV'
                         });
@@ -74,12 +96,12 @@ return {
         let description = '';
         const descEl = doc.querySelector('.entry-content p') || doc.querySelector('.synopsis');
         if (descEl) description = descEl.textContent?.trim();
-        const coverUrl = doc.querySelector('.entry-content img')?.getAttribute('src') ||
+        const rawCoverUrl = doc.querySelector('.entry-content img')?.getAttribute('src') ||
             doc.querySelector('.poster img')?.getAttribute('src') || '';
         return {
             id: animeId,
             title,
-            coverUrl,
+            coverUrl: cleanUrl(rawCoverUrl),
             description,
             status: 'Unknown'
         };
