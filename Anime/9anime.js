@@ -187,45 +187,118 @@ return {
         return uniqueEpisodes;
     },
     async getEpisodeSources(episodeId, _server) {
-        // Episode ID is the slug, e.g., naruto-episode-1
+        // Episode ID is the slug, e.g., one-piece-episode-1
         const url = `${this.baseUrl}/${episodeId}/`;
         console.log(`[9Anime] Sources: ${url}`);
         const response = await tauriFetch(url, { headers: HEADERS });
         const html = await response.text();
         const doc = new DOMParser().parseFromString(html, 'text/html');
-        const sources = [];
-        // 1. Check for IFRAME
-        const iframes = doc.querySelectorAll('iframe');
-        iframes.forEach(iframe => {
-            const src = iframe.getAttribute('src');
-            if (src) {
-                sources.push({
-                    url: src,
-                    quality: 'auto',
-                    isM3U8: src.includes('.m3u8'),
-                    isEmbed: true
-                });
-            }
-        });
-        // 2. Check for VIDEO tag
+
+        // 1. Check for direct VIDEO tag first
         const video = doc.querySelector('video source');
         if (video) {
             const src = video.getAttribute('src');
             if (src) {
-                sources.push({
-                    url: src,
-                    quality: 'auto',
-                    isM3U8: src.includes('.m3u8'),
-                    isEmbed: false
-                });
+                console.log(`[9Anime] Found direct video source: ${src}`);
+                return {
+                    sources: [{
+                        url: src,
+                        quality: 'auto',
+                        isM3U8: src.includes('.m3u8'),
+                        isEmbed: false
+                    }],
+                    headers: HEADERS
+                };
             }
         }
-        if (sources.length === 0) {
-            throw new Error('No sources found');
+
+        // 2. Extract from IFRAME embeds
+        const iframes = doc.querySelectorAll('iframe');
+        for (const iframe of iframes) {
+            const embedSrc = iframe.getAttribute('src');
+            if (!embedSrc) continue;
+
+            console.log(`[9Anime] Trying to extract from embed: ${embedSrc}`);
+
+            try {
+                // Fetch the embed page using tauriFetch to bypass CORS
+                const embedResponse = await tauriFetch(embedSrc, {
+                    headers: {
+                        ...HEADERS,
+                        'Referer': url
+                    }
+                });
+                const embedHtml = await embedResponse.text();
+
+                // Look for video sources in the embed HTML
+                // Common patterns: file:"url", sources:[{file:"url"}], src="url.m3u8"
+
+                // Pattern 1: file: "url" or file:"url"
+                const fileMatch = embedHtml.match(/file\s*[:"]\s*["']([^"']+\.(?:m3u8|mp4)[^"']*)/i);
+                if (fileMatch) {
+                    console.log(`[9Anime] Extracted video from embed: ${fileMatch[1]}`);
+                    return {
+                        sources: [{
+                            url: fileMatch[1],
+                            quality: 'auto',
+                            isM3U8: fileMatch[1].includes('.m3u8'),
+                            isEmbed: false
+                        }],
+                        headers: {
+                            'Referer': embedSrc,
+                            'Origin': new URL(embedSrc).origin,
+                            ...HEADERS
+                        }
+                    };
+                }
+
+                // Pattern 2: sources array
+                const sourcesMatch = embedHtml.match(/sources\s*[=:]\s*\[([^\]]+)\]/i);
+                if (sourcesMatch) {
+                    const urlMatch = sourcesMatch[1].match(/["']([^"']+\.(?:m3u8|mp4)[^"']*)/i);
+                    if (urlMatch) {
+                        console.log(`[9Anime] Extracted from sources array: ${urlMatch[1]}`);
+                        return {
+                            sources: [{
+                                url: urlMatch[1],
+                                quality: 'auto',
+                                isM3U8: urlMatch[1].includes('.m3u8'),
+                                isEmbed: false
+                            }],
+                            headers: {
+                                'Referer': embedSrc,
+                                'Origin': new URL(embedSrc).origin,
+                                ...HEADERS
+                            }
+                        };
+                    }
+                }
+
+                // Pattern 3: Generic m3u8/mp4 URL in the page
+                const genericMatch = embedHtml.match(/["'](https?:\/\/[^"']+\.(?:m3u8|mp4)[^"']*)/i);
+                if (genericMatch) {
+                    console.log(`[9Anime] Found generic video URL: ${genericMatch[1]}`);
+                    return {
+                        sources: [{
+                            url: genericMatch[1],
+                            quality: 'auto',
+                            isM3U8: genericMatch[1].includes('.m3u8'),
+                            isEmbed: false
+                        }],
+                        headers: {
+                            'Referer': embedSrc,
+                            'Origin': new URL(embedSrc).origin,
+                            ...HEADERS
+                        }
+                    };
+                }
+
+                console.log(`[9Anime] Could not extract video from embed: ${embedSrc}`);
+            } catch (err) {
+                console.warn(`[9Anime] Failed to fetch embed:`, err);
+            }
         }
-        return {
-            sources,
-            headers: HEADERS
-        };
+
+        throw new Error('No playable video sources found');
     }
 };
