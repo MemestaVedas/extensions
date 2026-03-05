@@ -218,6 +218,9 @@ return {
                 chapters.push({ id, number, title: `Chapter ${number}` });
             }
 
+            // Sort by chapter number (descending - newest first)
+            chapters.sort((a, b) => b.number - a.number);
+
             console.log('[WeebCentral] Parsed chapters:', chapters.length);
             return chapters;
         } catch (error) {
