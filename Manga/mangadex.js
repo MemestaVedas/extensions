@@ -6,7 +6,7 @@
 return {
     id: 'mangadex',
     name: 'MangaDex',
-    version: '1.0.0',
+    version: '1.0.1',
     baseUrl: 'https://mangadex.org',
     apiUrl: 'https://api.mangadex.org',
     lang: 'en',
