@@ -8,7 +8,7 @@
 return {
     id: 'mangareader',
     name: 'MangaReader',
-    version: '1.0.0',
+    version: '1.0.1',
     baseUrl: 'https://mangareader.to',
     lang: 'en',
 
