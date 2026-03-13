@@ -10,7 +10,7 @@
 return {
     id: 'weebcentral',
     name: 'WeebCentral',
-    version: '1.0.0',
+    version: '1.0.2',
     baseUrl: 'https://weebcentral.com',
     lang: 'en',
 
@@ -194,7 +194,8 @@ return {
                     if (span.querySelector('svg, style')) continue;
                     const text = span.textContent?.trim() || '';
                     if (text.includes('{') || text.includes('fill:') || text.includes('.st')) continue;
-                    if (text.toLowerCase().includes('chapter')) {
+                    // Match chapter, episode, or any text with a number
+                    if (text.toLowerCase().includes('chapter') || text.toLowerCase().includes('episode')) {
                         name = text;
                         break;
                     }
@@ -205,18 +206,24 @@ return {
                     clone.querySelectorAll('svg, style').forEach(el => el.remove());
                     name = clone.textContent?.trim() || '';
                     if (name.includes('{') || name.includes('.st')) {
-                        const chapterMatch = name.match(/Chapter\s*\d+(\.\d+)?/i);
+                        const chapterMatch = name.match(/(Chapter|Episode)\s*\d+(\.\d+)?/i);
                         name = chapterMatch ? chapterMatch[0] : 'Chapter';
                     }
                 }
 
                 if (!name) name = 'Chapter';
 
-                const numMatch = name.match(/Chapter\s*(\d+(\.\d+)?)/i);
+                // Generic number extraction — works for "Chapter 10", "Episode 188", etc.
+                const numMatch = name.match(/(\d+(\.\d+)?)/);
                 const number = numMatch ? parseFloat(numMatch[1]) : chapters.length + 1;
 
-                chapters.push({ id, number, title: `Chapter ${number}` });
+                // Detect prefix (Chapter/Episode) and preserve it
+                const prefix = name.toLowerCase().includes('episode') ? 'Episode' : 'Chapter';
+                chapters.push({ id, number, title: `${prefix} ${number}` });
             }
+
+            // Sort by chapter number (descending - newest first)
+            chapters.sort((a, b) => b.number - a.number);
 
             console.log('[WeebCentral] Parsed chapters:', chapters.length);
             return chapters;

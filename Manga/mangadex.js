@@ -6,7 +6,7 @@
 return {
     id: 'mangadex',
     name: 'MangaDex',
-    version: '1.0.0',
+    version: '1.0.1',
     baseUrl: 'https://mangadex.org',
     apiUrl: 'https://api.mangadex.org',
     lang: 'en',
@@ -115,7 +115,8 @@ return {
                     id: ch.id,
                     number: parseFloat(ch.attributes.chapter) || 0,
                     title: ch.attributes.title || `Chapter ${ch.attributes.chapter}`
-                }));
+                }))
+                .sort((a, b) => b.number - a.number);
         } catch (e) {
             console.error('[MangaDex] Chapters failed:', e);
             return [];
