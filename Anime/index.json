@@ -1,9 +1,9 @@
 {
     "name": "PLAY-ON! Anime Extensions",
-    "description": "Official anime streaming source extensions for PLAY-ON!, for now only supports HiAnime sites.",
+    "description": "Official anime streaming source extensions for PLAY-ON!",
     "extensions": [
         {
-            "id": "hianimeto",
+            "id": "hianime",
             "name": "HiAnime",
             "type": "anime",
             "version": "1.0.0",
@@ -23,6 +23,17 @@
             "iconUrl": "https://9anime.org.lv/favicon.ico",
             "bundleUrl": "9anime.js",
             "description": "Stream anime with sub and dub options"
+        },
+        {
+            "id": "anikai",
+            "name": "AnimeKai",
+            "type": "anime",
+            "version": "1.0.0",
+            "lang": "en",
+            "nsfw": false,
+            "iconUrl": "https://anikai.to/assets/uploads/37585a3ffa8ec292ee9e2255f3f63b48ceca17e5241280b3dc21.png",
+            "bundleUrl": "anikai.js",
+            "description": "Stream anime from AnimeKai with search, details, episodes, and MegaUp playback"
         }
     ]
 }
